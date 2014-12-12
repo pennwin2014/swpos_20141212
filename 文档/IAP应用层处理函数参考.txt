@@ -1,0 +1,83 @@
+/*
+********************************************************************************************************
+** 函数名称 ：RespondDOWN_IAP()
+** 函数功能 ：IAP下载
+** 入口参数 ：无
+** 出口参数 ：无
+*********************************************************************************************************
+*/
+uint8 RespondDOWN_IAP(void)
+{
+
+	uint8 bOK;
+	uint8 cbuff[5];
+	//uint8 ctemp;
+	uint16 NumIAP;
+	uint16 FileNum;
+	uint32 FileSize;	
+	//uint16 i;
+	uint16 u16sum;
+	//uint16 u16cmp;		
+
+
+	//重新计算在线通知时间,避免引起在线通知而使下载过程中断
+	gnNotifyInterval = gcNoticTime*60;		//获取在线通知时间
+	glSendNotify= CalculateOnlineNotice();									//计算得出下一次在线通知时间间隔
+	if(glSendNotify>gnNotifyInterval*2||gnNotifyInterval==0)
+	{
+		glSendNotify = 60;																	//过滤不合法在线通知时间间隔
+	}
+		
+	gbOnlineNotify = FALSE;		//清除在线通知标志		
+	
+	if((1 == master[FIELD20].bit_flag) && (1 == master[FIELD21].bit_flag) )		//存在21域
+	{
+		memcpy((uint8 *)&NumIAP, master[FIELD20].cdata,2);	
+		
+		bOK = SF_Write(FPA_IAP_START + NumIAP * 2, 0, master[FIELD21].cdata, 256 , TRUE);
+		bOK &= SF_Write(FPA_IAP_START + NumIAP * 2 + 1, 0, &master[FIELD21].cdata[256], 256, TRUE);		
+
+		g16FontNum = NumIAP;
+		
+		if(0 == bOK)
+		{
+			//NumIAP = 0xffff;		//写失败,则发送0xffff
+
+			return ACK_WFLASHERROR;
+		}			
+	}
+
+	if(master[FIELD22].bit_flag)
+	{
+		u16sum = 0;
+		bOK = 1;
+		
+		memcpy((uint8 *)&FileSize,master[FIELD22].cdata,4);			//得到文件大小
+		
+		if(0x00 != FileSize)
+		{
+			FileNum = FileSize / 512;
+			if(0x00 != FileSize % 512)
+			{
+				FileNum += 1;
+			}
+
+			memcpy(cbuff, (uint8 *)&FileNum, 2);
+			memcpy(&cbuff[2], &master[FIELD22].cdata[4], 3);
+
+			bOK = SF_Write(FPA_IAP_CONFIG, 0x00, cbuff, 5, TRUE);	
+			
+			if(0x00 == bOK)
+			{
+				return ACK_WRITE_FILESIZE;
+			}
+			
+		}	
+		return ACK_SUCCESS;
+
+	}
+	
+	return ACK_SUCCBUTNOFINISH;
+		
+		
+}
